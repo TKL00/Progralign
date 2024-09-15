@@ -1369,10 +1369,10 @@ def iterativeTrimmingMCS(someG1, someG2, someType,
     if(len(somePreMatch) > 0):
         preMatchNodes = [b for (a, b) in untwistedPreMatch]
         removableNodes = [v for v in smallerGraphNodes if(not v in preMatchNodes)]
-        maxRemovable = len(removableNodes)
+        maxRemovable = len(removableNodes) ## TKL: Allow removal of all anchored vertices
     else:
         removableNodes = deepcopy(smallerGraphNodes)
-        maxRemovable = len(smallerGraphNodes)-1
+        maxRemovable = len(smallerGraphNodes)-1 ## TKL: Allow removal of all vertices (except trivial case where all vertices have been removed)
     # iterate removing combinations of vertices
     subsetCount = 0
     ## TKL: Note to self, maybe utilize clique finding instead of forcing all maximal graphs onto this unsuitable algorithm?
