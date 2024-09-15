@@ -318,9 +318,11 @@ def getGuideTree(someClusteringGraphSSP, someTreeMeasure = "distance"):
     theGuideTree.add_nodes_from(list(someClusteringGraphSSP.nodes()))
     # save leaves as contained graphs
     for eachLeaf in list(someClusteringGraphSSP.nodes()):
-        theContainedGraphs[eachLeaf] = [eachLeaf]
+        theContainedGraphs[eachLeaf] = [eachLeaf]       ## TKL: Prepare for left- and right children in a list.
     # iterative construction of dendrogram
     dendroGraph = deepcopy(someClusteringGraphSSP)
+
+    ## TKL: Continue concatenation of edges until the last remaining dendro node is the final (intermediate) alignment.
     while(dendroGraph.order() > 1):
         # get measures and optimal measure
         measures = nx.get_edge_attributes(dendroGraph, "measure")
@@ -330,13 +332,13 @@ def getGuideTree(someClusteringGraphSSP, someTreeMeasure = "distance"):
             optimalMeasure = max(list(measures.values()))
         # get candidate edges to contract and get edge to be compressed
         candidates = [(u, v) for (u, v) in list(dendroGraph.edges()) if(dendroGraph[u][v]["measure"] == optimalMeasure)]
-        (x, y) = tuple(sorted(list(candidates[0])))
+        (x, y) = tuple(sorted(list(candidates[0]))) ## TKL: Two most "similar" graph nodes, although at least one might be a dendro (intermediate alignment graph) node after first iteration.
         # update dendroGraph contracting vertices into dendroNode
         dendroNode = "(" + x + "," + y + ")"
         dendroGraph.add_node(dendroNode)
         otherNodes = [v for v in list(dendroGraph.nodes()) if(not v in [x, y, dendroNode])]
         for v in otherNodes:
-            newMeasure = (dendroGraph[x][v]["measure"] + dendroGraph[y][v]["measure"])/2
+            newMeasure = (dendroGraph[x][v]["measure"] + dendroGraph[y][v]["measure"])/2 ## TKL: Update distance for other vertices to the new dendro node as the average.
             dendroGraph.add_edge(dendroNode, v, measure = newMeasure)
         dendroGraph.remove_node(x)
         dendroGraph.remove_node(y)
@@ -347,7 +349,7 @@ def getGuideTree(someClusteringGraphSSP, someTreeMeasure = "distance"):
         # saved leaves hanging in subtree
         theContainedGraphs[dendroNode] = theContainedGraphs[x] + theContainedGraphs[y]
     # end of function
-    theDendrogram = list(dendroGraph.nodes())[0]
+    theDendrogram = list(dendroGraph.nodes())[0] ## TKL: There's only one node left??? Why insert it into a list and extract it again?
     return(theDendrogram, theGuideTree, theContainedGraphs)
 
 
@@ -409,15 +411,15 @@ def buildAlignment(someG1, someG2, someMatch,
     copyG1 = deepcopy(someG1)
     copyG1 = nx.relabel_nodes(copyG1, theMapToParentG1)
     copyG2 = deepcopy(someG2)
-    repeatedEdges = [(u, v) for (u, v) in edgesG2 if((u in classD) and (v in classD))]
-    repeatedEdges = [(u, v) for (u, v) in repeatedEdges if(((invM[u], invM[v]) in edgesG1) or ((invM[v], invM[u]) in edgesG1))]
+    repeatedEdges = [(u, v) for (u, v) in edgesG2 if((u in classD) and (v in classD))] 
+    repeatedEdges = [(u, v) for (u, v) in repeatedEdges if(((invM[u], invM[v]) in edgesG1) or ((invM[v], invM[u]) in edgesG1))] ## TKL: What about ambiguous edges G1 -> G2 ?
     copyG2.remove_edges_from(repeatedEdges)
     copyG2 = nx.relabel_nodes(copyG2, theMapToParentG2)
     # make union
     theAlignment = nx.union(copyG1, copyG2)
     # contract vertices in match
     for (v1, v2) in someMatch:
-        # apply contraction function
+        # apply contraction function (TKL: Contracting two vertices that correspond to the same node in the alignment graph)
         theAlignment = nx.identified_nodes(theAlignment, theMapToParentG1[v1], theMapToParentG2[v2])
         # remove contraction attribute created by networkx
         if("contraction" in list(theAlignment.nodes[theMapToParentG1[v1]].keys())):
@@ -433,6 +435,8 @@ def buildAlignment(someG1, someG2, someMatch,
         theExistence[vP] = dict()
         for leaf in theLeaves:
             theExistence[vP][leaf] = "."
+            ## TKL: For the node vP in the alignment graph, we update that alignment nodes' existence in 
+            ## TKL: for the left and right-handside graphs.
             if(leaf in containedG1):
                 theExistence[vP][leaf] = deepcopy(existenceG1[v][leaf])
             if(leaf in containedG2):
@@ -450,8 +454,8 @@ def buildAlignment(someG1, someG2, someMatch,
         vP = theMapToParentG2[v]
         theExistence[vP] = dict()
         for leaf in theLeaves:
-            theExistence[vP][leaf] = "."
-            if(leaf in containedG1):
+            theExistence[vP][leaf] = "." ## TKL: For later use to address that these graphs have not been considered yet.
+            if(leaf in containedG1): ## TKL: Make sure to indicate that this node does not belong to graphs from the subtree that isn't its origin subtree (column)
                 theExistence[vP][leaf] = "-"
             if(leaf in containedG2):
                 theExistence[vP][leaf] = deepcopy(existenceG2[v][leaf])
@@ -487,7 +491,7 @@ def matchScore(someG1, someG2, someMatch, existenceG1, existenceG2, containedG1,
         # get relevant sets of vertices
         nodesG1 = list(someG1.nodes())
         nodesG2 = list(someG2.nodes())
-        classA = [v1 for (v1, v2) in someMatch]
+        classA = [v1 for (v1, v2) in someMatch]     ## TKL: Vertices mapped to each other between G_1 and G_2 have the same label in the alignment graph.
         classD = [v2 for (v1, v2) in someMatch]
         classB = [v for v in nodesG1 if(not v in classA)]
         classC = [v for v in nodesG2 if(not v in classD)]
@@ -510,18 +514,19 @@ def matchScore(someG1, someG2, someMatch, existenceG1, existenceG2, containedG1,
             vP = theMapToParentG1[v]
             testExistence[vP] = dict()
             for leaf in theLeaves:
+                ## TKL: ContainedG1 is the set of all input graphs that are contained within G1
                 if(leaf in containedG1):
                     testExistence[vP][leaf] = deepcopy(existenceG1[v][leaf])
                 if(leaf in containedG2):
                     testExistence[vP][leaf] = deepcopy(existenceG2[forwardMatch[v]][leaf])
-        for v in classB:
+        for v in classB:    ## TKL: Unmapped vertices from G_1
             vP = theMapToParentG1[v]
             testExistence[vP] = dict()
             for leaf in theLeaves:
                 if(leaf in containedG1):
-                    testExistence[vP][leaf] = deepcopy(existenceG1[v][leaf])
+                    testExistence[vP][leaf] = deepcopy(existenceG1[v][leaf]) ## TKL: Inherit values from graphs where this vertex did belong previously.
                 if(leaf in containedG2):
-                    testExistence[vP][leaf] = "-"
+                    testExistence[vP][leaf] = "-" ## TKL: Insert gaps in all graphs where this vertex is not involved 
         for v in classC:
             vP = theMapToParentG2[v]
             testExistence[vP] = dict()
@@ -532,7 +537,7 @@ def matchScore(someG1, someG2, someMatch, existenceG1, existenceG2, containedG1,
                     testExistence[vP][leaf] = deepcopy(existenceG2[v][leaf])
         # get score from sum of scores
         squareLeaves = list(combinations(containedG1 + containedG2, r = 2))
-        for vP in list(testExistence.keys()):
+        for vP in list(testExistence.keys()): ## TKL: All vertices in the alignment graph are iterated through (despite, in the recursive function, only one vertex in the alignment graph being affected by a new choice of matches.)
             # reinitialize sum of scores
             sumColumn = 0
             # do sum of scores
@@ -690,6 +695,7 @@ def isMaxColoredMatch(someG1, someG2, someMatch):
     return(len(labelIntersection) == 0)
 
 
+## TKL: Optimization possibility - let's not recompute, but instead update?
 # function: determine ambiguous pairs of a given alignment ---------------------
 def getAmbiguousPairs(someAlignment, someExistence, someContained):
     # local variables
@@ -857,7 +863,7 @@ def undirRecursiveExpansionMCS(someG1, someG2,
                     if(isMaxColoredMatch(someG1, someG2, someMatch)):
                         foundMaxColoredMatch = True
                         return(allMatches, foundSubIso, foundMaxColoredMatch)
-            else:
+            else: ## TKL: One graph must be completely mapped
                 allMatches = [someMatch]
                 if(vLabels and eLabels):
                     if(ambiguousPairsCheck):
@@ -874,7 +880,7 @@ def undirRecursiveExpansionMCS(someG1, someG2,
         # save to MCS list if gets the same score of alignment
         if(scoreNewMatch == scoreOldMatch):
             allMatchesSet = [set(eachMatch) for eachMatch in allMatches]
-            if(not set(someMatch) in allMatchesSet):
+            if(not set(someMatch) in allMatchesSet): ## TKL: Check if this mapping has been found previously. BUT, there is a total order of vertices that you can map to, so why is this even checked???
                 # append match
                 if(len(someMatch) < expOrder):
                     allMatches = allMatches + [someMatch]
@@ -905,12 +911,13 @@ def undirRecursiveExpansionMCS(someG1, someG2,
                 if(vLabels and eLabels):
                     if(ambiguousPairsCheck):
                         foundSubIso = isSubIso(someG1, someG2, someMatch)
-                        if(foundSubIso):
+                        if(foundSubIso): ## TKL: Why "if" here? (and in similar places). Ambiguous edges have nothing to do with the vertex labels.
                             foundMaxColoredMatch = True
                     else:
                         foundSubIso = True
                         foundMaxColoredMatch = True
     # pre-evaluate available pairs
+    ## TKL: Score independent choice of branching to ensure full coverage of plausibile search tree.
     if(len(someMatch) < expOrder):
         # generate auxiliary structures
         currMatch1 = [x for (x, y) in someMatch]
@@ -920,7 +927,7 @@ def undirRecursiveExpansionMCS(someG1, someG2,
         # get candidate pairs (if any)
         candidatePairs = undirCandidatesMCS(someMatch, currMatch1, currMatch2, someG1, someG2, totOrder)
         # evaluate candidate pairs
-        for (n1, n2) in candidatePairs:
+        for (n1, n2) in candidatePairs: 
             # print progress only in first call
             if(progressReport and printProgressMCS):
                 progress = progress + 1
@@ -967,6 +974,7 @@ def undirCandidatesMCS(someMatch, currMatch1, currMatch2, someG1, someG2, totOrd
         maxMatchedIndex = max([totOrder[n2] for (n1, n2) in someMatch])
     # get candidate pairs
     valid1 = [x for x in list(someG1.nodes()) if(not x in currMatch1)]
+    ## TKL: We just must ensure that whatever we map, it has to be a vertex y preserving the total ordering.
     valid2 = [y for y in list(someG2.nodes()) if((not y in currMatch2) and (totOrder[y] > maxMatchedIndex))]
     P = list(product(valid1, valid2))
     # end of function
@@ -999,7 +1007,7 @@ def undirSintacticFeasabilityMCS(n1, n2, currMatch1, currMatch2, forMatch, invMa
         ambNeigh1 = list(set([u for (u, v) in ambiguousG1 if(v == n1)] + [v for (u, v) in ambiguousG1 if(u == n1)]))
         ambNeigh2 = list(set([u for (u, v) in ambiguousG2 if(v == n2)] + [v for (u, v) in ambiguousG2 if(u == n2)]))
     # compare neighborhoods
-    for v1 in matchNeigh1:
+    for v1 in matchNeigh1: ## TKL: Consider all n1 neighbours that have been matched already and ensure that they have been mapped to n2's matched neighbourhood.
         # check if either true or ambiguous neighbor
         if(not forMatch[v1] in (matchNeigh2 + ambNeigh2)):
             return(False)
@@ -1348,12 +1356,13 @@ def iterativeTrimmingMCS(someG1, someG2, someType,
         biggerGraph = deepcopy(someG1)
         smallerGraph = deepcopy(someG2)
         smallerWas = 2
-        untwistedPreMatch = deepcopy(somePreMatch)
+        untwistedPreMatch = deepcopy(somePreMatch) ## TKL: Possibly an anchor.
     else:
         biggerGraph = deepcopy(someG2)
         smallerGraph = deepcopy(someG1)
         smallerWas = 1
-        untwistedPreMatch = [(n2, n1) for (n1, n2) in somePreMatch]
+        untwistedPreMatch = [(n2, n1) for (n1, n2) in somePreMatch] ## TKL: Map from G2 to G1 instead. (G1 has potential of being contained in G2)
+
     # get smaller graph nodes
     smallerGraphNodes = list(smallerGraph.nodes())
     # get removable nodes (not in pre-match)
@@ -1366,11 +1375,12 @@ def iterativeTrimmingMCS(someG1, someG2, someType,
         maxRemovable = len(smallerGraphNodes)-1
     # iterate removing combinations of vertices
     subsetCount = 0
+    ## TKL: Note to self, maybe utilize clique finding instead of forcing all maximal graphs onto this unsuitable algorithm?
     for K in range(0, maxRemovable+1):
         # reinitialize variables
         newMatches = []
         # get n-choose-k combinations
-        removableSubsets = list(combinations(removableNodes, K))
+        removableSubsets = list(combinations(removableNodes, K)) ## TKL: In order, s.t. smallest amount of vertices is removed first.
         # remove each subset
         for eachSubset in removableSubsets:
             # reinitialize flags
@@ -1396,10 +1406,10 @@ def iterativeTrimmingMCS(someG1, someG2, someType,
                 subsetCount = subsetCount + 1
                 printProgress(round(subsetCount*100/(2**maxRemovable), 2), progressIn = "in case", reportCase = False)
             # save subisos
-            if(answerSubIso):
+            if(answerSubIso): ## TKL: All non-removed vertices were matched in this iteration.
                 newMatches = newMatches + tempSubIsos
                 # early finish when optimizing order and just one match is needed
-                if(justOneMatch and (score == "order")):
+                if(justOneMatch and (score == "order")): ## TKL: First and largest mapping is passed on, regardless of other maximal mappings. Needs to be adjusted for branch-and-bound if needed.
                     break
         # save or return new matches (if any)
         if(len(newMatches) > 0):
@@ -1411,6 +1421,7 @@ def iterativeTrimmingMCS(someG1, someG2, someType,
                     tempNewMatches.append([(n1, n2) for (n2, n1) in eachMatch])
                 newMatches = deepcopy(tempNewMatches)
             # if only optimizing score then stop
+            ## TKL: Stop as soon as first possible matching is found.
             if(score == "order"):
                 # print final progress and finish
                 if(printProgressMCS):
@@ -1432,9 +1443,9 @@ def iterativeTrimmingMCS(someG1, someG2, someType,
                         else:
                             if(scoreNewMatch == maxNewScore):
                                 optimalNewMatches.append(deepcopy(eachMatch))
-                    # otherwise check if new matches optimize the current score
+                    # otherwise check if new matches optimize the current score ## TKL: WHY NOT JUST SAVE SCORE_OLD_MATCH???
                     scoreOldMatch = matchScore(someG1, someG2, allMatches[0], existenceG1, existenceG2, containedG1, containedG2, score = score)
-                    if(maxNewScore > scoreOldMatch):
+                    if(maxNewScore > scoreOldMatch): ## TKL: Just overwrite scoreOldMatch with maxNewScore.
                         allMatches = deepcopy(optimalNewMatches)
                     else:
                         if(maxNewScore == scoreOldMatch):
@@ -1522,6 +1533,8 @@ def undirCandidatesISO(someMatch, currMatch1, currMatch2, someG1, someG2, theOrd
     alternative1 = []
     alternative2 = []
     # get candidate pairs extending match [T(s)]
+    ## TKL: That is, all pairs (x, y) where x is in the neighbourhood of matched vertices in G1 and vice versa for y in G2.
+    ## TKL: someMatch is the set of (u, v) where u -> v.
     for (n1, n2) in someMatch:
         validNeigh1 = [x for x in list(someG1.neighbors(n1)) if(not x in currMatch1)]
         validNeigh2 = [y for y in list(someG2.neighbors(n2)) if(not y in currMatch2)]
@@ -1538,8 +1551,15 @@ def undirCandidatesISO(someMatch, currMatch1, currMatch2, someG1, someG2, theOrd
     # ignore pairs in P not satisfying the total order
     if(len(P) > 0):
         minIndex = min([theOrder[y] for (x, y) in P])
+        ## TKL: All previously matched ys must have an order less than this minIndex, 
+        ## TKL: due to the way matched ys are chosen (as in, chosen right here).
+        ## TKL: The list of (x, y) can now differ in xs but not in ys. This is because in the VF2 algorithm we cannot skip vertices
+        ## TKL: so we must always ensure that vertices are mapped w.r.t. to the total ordering.
         P = [(x, y) for (x, y) in P if(theOrder[y] == minIndex)]
     # end of function
+    ## TKL: neighT1 and neighT2 is the set of vertices in G_1 and G_2 
+    ## TKL: that are neighbours of matched vertices but not in themselves matched
+    ## TKL: to anything. 
     return(P, neighT1, neighT2)
 
 
@@ -1572,26 +1592,30 @@ def undirSintacticFeasabilityISO(n1, n2, currMatch1, currMatch2, forMatch, invMa
     if(ambiguousCheck):
         ambNeigh1 = list(set([u for (u, v) in ambiguousG1 if(v == n1)] + [v for (u, v) in ambiguousG1 if(u == n1)]))
         ambNeigh2 = list(set([u for (u, v) in ambiguousG2 if(v == n2)] + [v for (u, v) in ambiguousG2 if(u == n2)]))
-    # compare neighborhoods
+    # compare neighborhoods ## TKL: Check that n1's neighbourhood of matched vertices is mapped to n2's neighbourhood of matched vertices (or through ambiguous edges)
     for v1 in matchNeigh1:
         # check if either true or ambiguous neighbor
-        if(not forMatch[v1] in (matchNeigh2 + ambNeigh2)):
+        if(not forMatch[v1] in (matchNeigh2 + ambNeigh2)): 
             return(False)
     for v2 in matchNeigh2:
         # check if either true or ambiguous neighbor
         if(not invMatch[v2] in (matchNeigh1 + ambNeigh1)):
             return(False)
     # look ahead 1': G1 should provide enough neighbors and ambiguous neighbors in T to cover G2 (the subgraph)
+    ## TKL: T1 is the set of unmapped vertices adjacent to already mapped vertices.
     candiNeigh1 = [x for x in neigh1 if(x in someT1)]
     candiNeigh2 = [y for y in neigh2 if(y in someT2)]
     if(len(candiNeigh2) > len(list(set(candiNeigh1 + ambNeigh1)))):
-        return(False)
+        return(False) ## TKL: This suggests that there will be a "remainder" of unmatched vertices in G2 after matching all neighbours of n2 with neighbours of n1.
     # look ahead 2': G1 should have enough real neighbors and ambiguous neighbors to cover G2 (the subgraph)
+    ## TKL: Now consider all neighbouring vertices of n1/n2 that have no connection whatsoever to already mapped vertices and aren't themselves already mapped.
     exteriorNeigh1 = [x for x in neigh1 if((not x in someT1) and (not x in currMatch1))]
     exteriorNeigh2 = [y for y in neigh2 if((not y in someT2) and (not y in currMatch2))]
     if(len(exteriorNeigh2) > len(list(set(exteriorNeigh1 + ambNeigh1)))):
         return(False)
     # end of function
+    ## TKL: All these lookaheads are necessary in the ISO (trimming) function as we have a constant
+    ## TKL: assumption that G2 can be contained in all of G1.
     return(True)
 
 
@@ -1894,6 +1918,10 @@ def PGA(someType, someGT, someBaseDict, someDendro, someContained, someScore,
     pathRoot = dict()
     allScores = dict()
     mapToRoot = dict()
+    ## TKL: The existence table has an entry for each graph.
+    ## TKL: Each graph has an entry for each vertex, specifying
+    ## TKL: for each vertex if they "exist" (are matched) in the other graphs.
+    ## TKL: Existence tables are overwritten when.
     existence = dict()
     alignments = dict()
     mapToParent = dict()
@@ -1917,16 +1945,16 @@ def PGA(someType, someGT, someBaseDict, someDendro, someContained, someScore,
     allAlignments = deepcopy(alignments)     # saves leaves and all alignments at the end
     # get leaves values for existence dictionary and their depths
     existence = dict()
-    for eachLeaf in list(alignments.keys()):
+    for eachLeaf in list(alignments.keys()): ## TKL: Consider a specific alignment (input) graph.
         allScores[eachLeaf] = 0
         mapToRoot[eachLeaf] = dict()
         existence[eachLeaf] = dict()
         graphLeaf = deepcopy(alignments[eachLeaf])
         ambiguousPairs[eachLeaf] = []
-        for v in list(graphLeaf.nodes()):
+        for v in list(graphLeaf.nodes()): ## TKL: Consider a specific vertex in the specific input graph
             mapToRoot[eachLeaf][v] = ""
-            existence[eachLeaf][v] = {str(i):"." for i in indices}
-            existence[eachLeaf][v][eachLeaf] = deepcopy(graphLeaf.nodes[v]["nodeLabel"])
+            existence[eachLeaf][v] = {str(i):"." for i in indices} ## TKL: Indices is global variable corresponding to the number of input graphs. Default value for a vertex' existence in all input graphs is a dot.
+            existence[eachLeaf][v][eachLeaf] = deepcopy(graphLeaf.nodes[v]["nodeLabel"]) ## TKL: Overwrite value for the graph that v belongs to, because it clearly exists in that one.
     # get paths from leafs to root and depth of leaves
     pathRoot = {h:nx.shortest_path(guideTree, source = h, target = someDendro) for h in list(alignments.keys())}
     # get height of guide tree
@@ -1946,6 +1974,8 @@ def PGA(someType, someGT, someBaseDict, someDendro, someContained, someScore,
                 cherries.append(v)
         # THEN align leaf-neighbors of cherries and delete them turning cherries into leaves
         toRemove = []
+
+        ## TKL: A cherry consists of two graphs to be matched.
         for cherry in cherries:
             # get the two leaf neighbors
             leafNeighbors = [h for h in list(guideTree.neighbors(cherry)) if(guideTree.degree(h) == 1)]
@@ -1977,7 +2007,7 @@ def PGA(someType, someGT, someBaseDict, someDendro, someContained, someScore,
                                                            ambiguousPairsCheck = holdAmbEdges)
                 # check if MCS is empty (possible when considering vertex labels)
                 if(len(possibleMatches) > 0):
-                    match = possibleMatches[0]
+                    match = possibleMatches[0]  ## TKL: Why is only the first match considered? Is it because all elements of allMatches will have the same scoring?
                 else:
                     match = []
                 # build alignment graph and get final score
@@ -2098,6 +2128,7 @@ inputFile = open(inputFileName, "rb")
 inputList = pkl.load(inputFile)
 inputFile.close()
 
+print(inputList)
 
 # check non-empty list
 if(not isinstance(inputList, list)):
@@ -2188,6 +2219,7 @@ for (i, j) in list(combinations(indices, r = 2)):
         uvSimilaritySSP = kernelMatrixSSP[i][j]
         clusteringGraphSSP.add_edge(str(i), str(j), measure = uvSimilaritySSP)
 
+## TKL: The clusteringGraphSSP is a graph with the input graphs as vertices, and edges connecting the vertices have the similarity measure as a label.
 
 # task message
 print("* Building guide tree ...")
